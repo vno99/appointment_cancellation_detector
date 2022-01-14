@@ -4,7 +4,8 @@ import time
 import mlflow
 from mlflow.models.signature import infer_signature
 from sklearn.model_selection import train_test_split 
-from sklearn.preprocessing import  StandardScaler, FunctionTransformer
+from sklearn.preprocessing import  StandardScaler, FunctionTransformer, OneHotEncoder
+from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import Pipeline
 
@@ -44,7 +45,7 @@ if __name__ == "__main__":
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2)
 
     # Preprocessing 
-    def preprocessor(df):
+    def date_processing(df):
         df = df.copy()
 
         ## Transform datetime into a number
@@ -57,20 +58,32 @@ if __name__ == "__main__":
         ## Remove redundant info 
         df = df.drop(["ScheduledDay", "AppointmentDay"], axis=1)
 
-        ## Dummification 
-        df = pd.get_dummies(df, drop_first=True)
-
         return df 
 
-    features_preprocessor = FunctionTransformer(preprocessor)
+    date_preprocessor = FunctionTransformer(date_processing)
+
+    # Preprocessing 
+    categorical_features = ["Gender", "Neighbourhood"] # Select all the columns containing strings
+    categorical_transformer = OneHotEncoder(drop='first', handle_unknown='error', sparse=False)
+
+    numerical_feature_mask = ~X_train.columns.isin(["Gender", "Neighbourhood", "ScheduledDay","AppointmentDay"]) # Select all the columns containing anything else than strings
+    numerical_features = X_train.columns[numerical_feature_mask]
+    numerical_transformer = StandardScaler()
+
+    feature_preprocessor = ColumnTransformer(
+        transformers=[
+            ("categorical_transformer", categorical_transformer, categorical_features),
+            ("numerical_transformer", numerical_transformer, numerical_features)
+        ]
+    )
 
     # Pipeline 
     n_estimators = int(args.n_estimators)
     min_samples_split=int(args.min_samples_split)
 
     model = Pipeline(steps=[
-        ("Preprocessing", features_preprocessor),
-        ("standard_scaler", StandardScaler()),
+        ("Dates_preprocessing", date_preprocessor),
+        ('features_preprocessing', feature_preprocessor),
         ("Regressor",RandomForestClassifier(n_estimators=n_estimators, min_samples_split=min_samples_split))
     ])
 
